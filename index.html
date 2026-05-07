@@ -4,172 +4,163 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>PostHog Engineering Impact — Top 5 Contributors</title>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <style>
     :root {
-      --high:    #0ea5e9;
-      --medium:  #f97316;
-      --low:     #94a3b8;
       --bg:      #f1f5f9;
       --card:    #ffffff;
       --border:  #e2e8f0;
       --text:    #0f172a;
       --muted:   #64748b;
-      --radius:  12px;
+      --high:    #0ea5e9;
+      --radius:  10px;
+      --c-high:  #0ea5e9;
+      --c-med:   #f59e0b;
+      --c-low:   #cbd5e1;
     }
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-    body {
+    html, body {
+      height: 100vh; overflow: hidden;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      padding: 28px 24px 48px;
-      line-height: 1.5;
+      background: var(--bg); color: var(--text); line-height: 1.4;
+    }
+
+    .wrapper {
+      display: flex; flex-direction: column;
+      height: 100vh; padding: 12px 14px; gap: 8px;
     }
 
     /* ── Header ── */
-    .site-header { text-align: center; margin-bottom: 32px; }
-    .site-header h1 {
-      font-size: 1.45rem; font-weight: 800; letter-spacing: -0.02em;
-    }
-    .site-header p { color: var(--muted); margin-top: 5px; font-size: 0.88rem; }
+    .site-header { display: flex; align-items: baseline; gap: 14px; flex-shrink: 0; flex-wrap: wrap; }
+    .site-header h1 { font-size: 0.92rem; font-weight: 800; letter-spacing: -0.02em; white-space: nowrap; }
+    .header-date   { font-size: 0.70rem; color: var(--muted); white-space: nowrap; }
 
-    /* ── Grid ── */
-    .cards-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 20px;
-      max-width: 1180px;
-      margin: 0 auto;
+    /* ── Formula bar ── */
+    .formula-bar {
+      display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 8px; padding: 7px 12px; flex-shrink: 0;
     }
-    .cards-grid .card:first-child { grid-column: 1 / -1; }
+    .formula-label { font-size: 0.60rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); white-space: nowrap; }
+    .formula-sep   { color: var(--border); }
+    .formula-eq    { font-size: 0.68rem; color: var(--text); white-space: nowrap; }
+    .fw  { font-weight: 700; }
+    .fc-blue   { color: #0369a1; }
+    .fc-green  { color: #15803d; }
+    .fc-purple { color: #7c3aed; }
+    .fc-high   { color: var(--high); }
 
-    /* ── Card ── */
-    .card {
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 22px;
+    /* ── Five-column row ── */
+    .engineers-row {
+      display: flex; flex: 1; min-height: 0;
+      gap: 10px; align-items: stretch;
     }
 
-    /* ── Card header row ── */
-    .card-head {
-      display: flex;
-      align-items: flex-start;
-      gap: 14px;
-      margin-bottom: 18px;
+    /* ── Per-engineer card ── */
+    .eng-card {
+      flex: 1; min-width: 0;
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 14px;
+      display: flex; flex-direction: column; gap: 9px;
+      overflow: hidden;
     }
+
+    /* ── Top row ── */
+    .card-top { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
     .rank-badge {
-      min-width: 30px; height: 30px;
-      border-radius: 50%;
+      width: 22px; height: 22px; border-radius: 50%;
       background: #334155; color: #fff;
-      font-weight: 800; font-size: 0.85rem;
-      display: flex; align-items: center; justify-content: center;
-      flex-shrink: 0; margin-top: 2px;
+      font-weight: 800; font-size: 0.68rem;
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0;
     }
     .rank-1 { background: #f59e0b; }
     .rank-2 { background: #94a3b8; }
     .rank-3 { background: #b45309; }
-    .avatar {
-      width: 52px; height: 52px;
-      border-radius: 50%;
-      border: 2px solid var(--border);
+    .avatar { width: 40px; height: 40px; border-radius: 50%; border: 2px solid var(--border); flex-shrink: 0; }
+    .eng-identity { flex: 1; min-width: 0; }
+    .eng-name { font-size: 0.83rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .score-label { font-size: 0.57rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+    .eng-score   { font-size: 1.5rem; font-weight: 800; color: var(--high); line-height: 1; }
+
+    /* ── Score progress bar ── */
+    .score-progress { height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; flex-shrink: 0; }
+    .score-progress-fill { height: 100%; background: var(--high); border-radius: 2px; }
+
+    /* ── Stats ── */
+    .stats-row { display: flex; gap: 10px; font-size: 0.65rem; color: var(--muted); flex-shrink: 0; flex-wrap: wrap; }
+    .stats-row strong { color: var(--text); }
+
+    /* ── Stacked bar ── */
+    .stacked-bar {
+      display: flex; border-radius: 5px; overflow: hidden;
+      background: var(--border); gap: 1px; flex-shrink: 0;
+    }
+    .stacked-seg { min-width: 1px; }
+
+    /* ── Tier section ── */
+    .tier-section { display: flex; flex-direction: column; gap: 4px; flex-shrink: 0; }
+    .section-label { font-size: 0.57rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+    .tier-legend { display: flex; gap: 8px; font-size: 0.61rem; }
+    .tier-legend span { display: flex; align-items: center; gap: 3px; }
+    .ldot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+
+    /* ── Score breakdown waterfall ── */
+    .score-breakdown {
+      display: flex; flex-direction: column; gap: 4px;
+      background: var(--bg); border-radius: 6px; padding: 8px;
       flex-shrink: 0;
-      background: var(--border);
     }
-    .eng-meta { flex: 1; min-width: 0; }
-    .eng-name  { font-size: 1.05rem; font-weight: 700; }
-    .narrative { font-size: 0.80rem; color: var(--muted); margin-top: 3px; line-height: 1.45; }
-    .score-block { text-align: right; flex-shrink: 0; }
-    .score-value { font-size: 1.6rem; font-weight: 800; color: var(--high); line-height: 1; }
-    .score-label { font-size: 0.68rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+    .breakdown-row { display: flex; align-items: center; gap: 5px; }
+    .breakdown-label { font-size: 0.60rem; font-weight: 600; width: 72px; flex-shrink: 0; }
+    .breakdown-val   { font-size: 0.70rem; font-weight: 700; width: 38px; text-align: right; flex-shrink: 0; }
+    .breakdown-eq    { font-size: 0.58rem; color: var(--muted); width: 60px; flex-shrink: 0; }
+    .bar-track { flex: 1; height: 5px; background: var(--border); border-radius: 3px; overflow: hidden; }
+    .bar-fill  { height: 100%; border-radius: 3px; }
+    .breakdown-pct { font-size: 0.57rem; color: var(--muted); width: 30px; text-align: right; flex-shrink: 0; }
+    .breakdown-divider { border-top: 1px solid var(--border); margin: 1px 0; }
+    .breakdown-total {
+      display: flex; justify-content: space-between; align-items: baseline;
+      font-size: 0.60rem; color: var(--muted);
+    }
+    .breakdown-total strong { color: var(--text); }
+    .breakdown-norm { font-size: 0.60rem; }
 
-    /* ── Divider ── */
-    .divider { border: none; border-top: 1px solid var(--border); margin: 14px 0; }
+    /* ── Work focus ── */
+    .work-focus { display: flex; flex-direction: column; gap: 4px; flex-shrink: 0; }
+    .cat-legend { display: flex; flex-wrap: wrap; gap: 2px 8px; font-size: 0.60rem; color: var(--muted); }
+    .cat-legend-item { display: flex; align-items: center; gap: 3px; }
+    .cat-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
 
-    /* ── Charts ── */
-    .charts-row {
-      display: flex;
-      gap: 24px;
-      margin-bottom: 14px;
-      align-items: flex-start;
+    /* ── Narrative ── */
+    .narrative {
+      font-size: 0.67rem; color: var(--muted); line-height: 1.4; flex-shrink: 0;
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
     }
-    .chart-block { flex: 1; min-width: 0; }
-    .chart-label {
-      font-size: 0.68rem; font-weight: 700;
-      text-transform: uppercase; letter-spacing: .05em;
-      color: var(--muted); margin-bottom: 8px;
-    }
-    .chart-wrap { display: flex; justify-content: center; }
-    .chart-legend {
-      display: flex; flex-wrap: wrap; gap: 6px 14px;
-      margin-top: 8px; justify-content: center;
-    }
-    .legend-item { display: flex; align-items: center; gap: 5px; font-size: 0.72rem; color: var(--muted); }
-    .legend-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 
-    /* ── Stats row ── */
-    .stats-row {
-      font-size: 0.80rem; color: var(--muted);
-      margin-bottom: 14px;
-      display: flex; flex-wrap: wrap; gap: 4px 20px;
-    }
-    .stat-item strong { color: var(--text); font-weight: 700; }
+    .divider { border: none; border-top: 1px solid var(--border); flex-shrink: 0; }
 
     /* ── Highlight PRs ── */
-    .pr-section h4 {
-      font-size: 0.68rem; font-weight: 700;
-      text-transform: uppercase; letter-spacing: .05em;
-      color: var(--muted); margin-bottom: 10px;
-    }
-    .pr-item {
-      display: grid;
-      grid-template-columns: auto 1fr;
-      grid-template-rows: auto auto;
-      column-gap: 10px;
-      row-gap: 2px;
-      margin-bottom: 10px;
-      align-items: baseline;
-    }
+    .pr-section { display: flex; flex-direction: column; gap: 7px; flex: 1; min-height: 0; overflow: hidden; }
+    .pr-label { font-size: 0.57rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); flex-shrink: 0; }
+    .pr-item { display: flex; flex-direction: column; gap: 2px; flex-shrink: 0; }
+    .pr-top  { display: flex; align-items: baseline; gap: 5px; }
     .tier-badge {
-      padding: 2px 8px; border-radius: 4px;
-      font-size: 0.62rem; font-weight: 700;
-      text-transform: uppercase; letter-spacing: .05em;
-      white-space: nowrap;
+      padding: 1px 5px; border-radius: 3px;
+      font-size: 0.55rem; font-weight: 700; text-transform: uppercase;
+      white-space: nowrap; flex-shrink: 0;
     }
     .tier-badge.high   { background: #e0f2fe; color: #0369a1; }
     .tier-badge.medium { background: #fff7ed; color: #c2410c; }
     .tier-badge.low    { background: #f1f5f9; color: #475569; }
     .pr-link {
-      color: var(--text); font-size: 0.83rem; font-weight: 500;
-      text-decoration: none; line-height: 1.4;
+      color: var(--text); font-size: 0.70rem; font-weight: 500;
+      text-decoration: none; line-height: 1.3;
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
     }
     .pr-link:hover { color: var(--high); text-decoration: underline; }
     .pr-rationale {
-      grid-column: 2; font-size: 0.76rem; color: var(--muted); line-height: 1.4;
-    }
-
-    /* ── Methodology ── */
-    .methodology {
-      max-width: 1180px; margin: 28px auto 0;
-      padding: 20px 24px;
-      background: var(--card); border: 1px solid var(--border);
-      border-radius: var(--radius);
-    }
-    .methodology h3 {
-      font-size: 0.68rem; font-weight: 700;
-      text-transform: uppercase; letter-spacing: .08em;
-      color: var(--muted); margin-bottom: 10px;
-    }
-    .methodology p { font-size: 0.82rem; color: var(--muted); line-height: 1.6; margin-bottom: 6px; }
-    .methodology p:last-child { margin-bottom: 0; }
-    .methodology strong { color: var(--text); }
-    .methodology a { color: var(--high); }
-
-    @media (max-width: 760px) {
-      .cards-grid { grid-template-columns: 1fr; }
-      .cards-grid .card:first-child { grid-column: auto; }
-      .charts-row { flex-direction: column; }
+      font-size: 0.62rem; color: var(--muted); line-height: 1.3;
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
     }
   </style>
 </head>
@@ -181,224 +172,201 @@
   <div id="root"></div>
   <script>
     "use strict";
-    const TOP5       = window.__TOP5__       || { top_5: [], metadata: {} };
+    const TOP5       = window.__TOP5__       || { top_5: [] };
     const NARRATIVES = (window.__NARRATIVES__ || {}).narratives || {};
 
-    const TIER_COLORS = { high: "#0ea5e9", medium: "#f97316", low: "#94a3b8" };
-    const CAT_COLORS  = {
-      bug_fix:        "#ef4444",
-      feature:        "#3b82f6",
-      performance:    "#10b981",
-      refactor:       "#8b5cf6",
-      infrastructure: "#f59e0b",
-      security:       "#dc2626",
-      cleanup:        "#94a3b8",
-      documentation:  "#6366f1",
-      unknown:        "#d1d5db",
+    const CAT_COLORS = {
+      feature: '#10b981', performance: '#f59e0b', refactor: '#8b5cf6',
+      bug: '#ef4444', infrastructure: '#64748b', docs: '#0ea5e9',
+      testing: '#ec4899', chore: '#94a3b8', security: '#dc2626',
     };
+    function catColor(k) { return CAT_COLORS[k] || '#94a3b8'; }
 
     function esc(s) {
-      return String(s ?? "")
-        .replace(/&/g, "&amp;").replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+      return String(s ?? '')
+        .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+        .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
 
-    function catName(k) { return k.replace(/_/g, " "); }
-
-    function legendHTML(labels, colors) {
-      return labels.map((l, i) =>
-        `<span class="legend-item">
-           <span class="legend-dot" style="background:${colors[i]}"></span>${esc(l)}
-         </span>`
-      ).join("");
-    }
-
-    function makeCard(eng, rank) {
-      const narrative   = NARRATIVES[eng.author] || "";
-      const tiers       = eng.impact_tiers     || {};
-      const cats        = eng.work_categories  || {};
-      const tierId      = `tier-${rank}`;
-      const catId       = `cat-${rank}`;
-      const rankClass   = rank <= 3 ? `rank-${rank}` : "";
-
-      // Tier legend (H / M / L counts)
-      const tierLegend  = [
-        `<span class="legend-item"><span class="legend-dot" style="background:${TIER_COLORS.high}"></span>High: ${tiers.high||0}</span>`,
-        `<span class="legend-item"><span class="legend-dot" style="background:${TIER_COLORS.medium}"></span>Med: ${tiers.medium||0}</span>`,
-        `<span class="legend-item"><span class="legend-dot" style="background:${TIER_COLORS.low}"></span>Low: ${tiers.low||0}</span>`,
-      ].join("");
-
-      // Category legend (top 5)
-      const catEntries  = Object.entries(cats).slice(0, 6);
-      const catLegend   = catEntries.map(([k, v]) =>
-        `<span class="legend-item">
-           <span class="legend-dot" style="background:${CAT_COLORS[k]||CAT_COLORS.unknown}"></span>
-           ${esc(catName(k))} ${Math.round(v*100)}%
-         </span>`
-      ).join("");
-
-      // Stats
-      const stats = [
-        `<span class="stat-item"><strong>${eng.pr_count||0}</strong> PRs</span>`,
-        `<span class="stat-item"><strong>${eng.non_trivial_pr_count||0}</strong> substantive</span>`,
-        `<span class="stat-item"><strong>${eng.reviews_given||0}</strong> reviews given</span>`,
-        `<span class="stat-item"><strong>${eng.distinct_authors_reviewed||0}</strong> authors reviewed</span>`,
-        `<span class="stat-item">tier score <strong>${(eng.tier_score||0).toFixed(1)}</strong></span>`,
-      ].join("");
-
-      // Highlight PRs
-      const prs = (eng.highlight_prs || []).map(pr => {
-        const tier = (pr.impact_tier || "low").toLowerCase();
-        const url  = `https://github.com/PostHog/posthog/pull/${pr.number}`;
-        return `
-          <div class="pr-item">
-            <span class="tier-badge ${esc(tier)}">${tier.toUpperCase()}</span>
-            <a class="pr-link" href="${esc(url)}" target="_blank" rel="noopener">
-              #${pr.number} ${esc((pr.title||"").slice(0,90))}
-            </a>
-            ${pr.rationale
-              ? `<span class="pr-rationale">${esc(pr.rationale)}</span>`
-              : ""}
-          </div>`;
-      }).join("");
-
+    function tierSection(tiers) {
+      const total = (tiers.high||0) + (tiers.medium||0) + (tiers.low||0);
+      if (!total) return '';
+      const hF = tiers.high||0, mF = tiers.medium||0, lF = tiers.low||0;
       return `
-        <div class="card">
-          <div class="card-head">
-            <div class="rank-badge ${rankClass}">${rank}</div>
-            <img class="avatar"
-                 src="https://github.com/${esc(eng.author)}.png?size=96"
-                 alt="${esc(eng.author)}"
-                 loading="lazy"
-                 onerror="this.onerror=null;this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 52 52%22%3E%3Crect fill=%22%23e2e8f0%22 width=%2252%22 height=%2252%22/%3E%3C/svg%3E'" />
-            <div class="eng-meta">
-              <div class="eng-name">${esc(eng.author)}</div>
-              ${narrative ? `<p class="narrative">${esc(narrative)}</p>` : ""}
-            </div>
-            <div class="score-block">
-              <div class="score-value">${(eng.final_score||0).toFixed(2)}</div>
-              <div class="score-label">impact score</div>
-            </div>
+        <div class="tier-section">
+          <div class="section-label">PR impact tiers &mdash; ${total} PRs scored by LLM</div>
+          <div class="stacked-bar" style="height:9px">
+            <div class="stacked-seg" style="flex:${hF};background:var(--c-high)" title="High: ${hF}"></div>
+            <div class="stacked-seg" style="flex:${mF};background:var(--c-med)"  title="Medium: ${mF}"></div>
+            <div class="stacked-seg" style="flex:${lF};background:var(--c-low)"  title="Low: ${lF}"></div>
           </div>
-
-          <hr class="divider" />
-
-          <div class="charts-row">
-            <div class="chart-block">
-              <div class="chart-label">Impact Tiers</div>
-              <div class="chart-wrap">
-                <canvas id="${tierId}" width="140" height="140"></canvas>
-              </div>
-              <div class="chart-legend">${tierLegend}</div>
-            </div>
-            <div class="chart-block">
-              <div class="chart-label">Work Categories</div>
-              <div class="chart-wrap">
-                <canvas id="${catId}" width="140" height="140"></canvas>
-              </div>
-              <div class="chart-legend">${catLegend}</div>
-            </div>
-          </div>
-
-          <div class="stats-row">${stats}</div>
-          <hr class="divider" />
-
-          <div class="pr-section">
-            <h4>Highlight PRs</h4>
-            ${prs || '<p style="font-size:.8rem;color:var(--muted)">No PRs scored.</p>'}
+          <div class="tier-legend">
+            <span><span class="ldot" style="background:var(--c-high)"></span><strong>${hF}</strong>&nbsp;High</span>
+            <span><span class="ldot" style="background:var(--c-med)"></span><strong>${mF}</strong>&nbsp;Medium</span>
+            <span><span class="ldot" style="background:var(--c-low)"></span><strong>${lF}</strong>&nbsp;Low</span>
           </div>
         </div>`;
     }
 
-    function initDoughnut(id, labels, data, colors) {
-      const ctx = document.getElementById(id);
-      if (!ctx) return;
-      new Chart(ctx, {
-        type: "doughnut",
-        data: {
-          labels,
-          datasets: [{
-            data,
-            backgroundColor: colors,
-            borderWidth: 2,
-            borderColor: "#fff",
-            hoverBorderColor: "#fff",
-          }],
-        },
-        options: {
-          responsive: false,
-          cutout: "62%",
-          plugins: {
-            legend: { display: false },
-            tooltip: {
-              callbacks: {
-                label: (ctx) => ` ${ctx.label}: ${ctx.formattedValue}`,
-              },
-            },
-          },
-          animation: { duration: 400 },
-        },
-      });
+    function workFocus(cats) {
+      const entries = Object.entries(cats).filter(([,v]) => v > 0).slice(0, 6);
+      if (!entries.length) return '';
+      const segs = entries.map(([k, v]) =>
+        `<div class="stacked-seg" style="flex:${(v*100).toFixed(1)};background:${catColor(k)}" title="${k.replace(/_/g,' ')}: ${Math.round(v*100)}%"></div>`
+      ).join('');
+      const legend = entries.map(([k, v]) =>
+        `<span class="cat-legend-item"><span class="cat-dot" style="background:${catColor(k)}"></span>${esc(k.replace(/_/g,' '))} ${Math.round(v*100)}%</span>`
+      ).join('');
+      return `
+        <div class="work-focus">
+          <div class="section-label">Work focus</div>
+          <div class="stacked-bar" style="height:9px">${segs}</div>
+          <div class="cat-legend">${legend}</div>
+        </div>`;
+    }
+
+    function scoreBreakdown(eng, maxRawScore) {
+      // Weighted contributions — these three values sum to final_score
+      const tierC  = (eng.tier_score          || 0) * 0.5;
+      const collC  = (eng.collaboration_score || 0) * 0.3;
+      const qualC  = (eng.avg_structural_score|| 0) * 0.2;
+      const raw    = eng.final_score || (tierC + collC + qualC);
+
+      function brow(label, color, rawVal, weight, contrib, total) {
+        const pct = total > 0 ? (contrib / total * 100) : 0;
+        const barW = pct.toFixed(1);
+        return `
+          <div class="breakdown-row">
+            <div class="breakdown-label" style="color:${color}">${label}</div>
+            <div class="breakdown-val">${rawVal}</div>
+            <div class="breakdown-eq" style="color:var(--muted)">×${weight} = ${contrib.toFixed(3)}</div>
+            <div class="bar-track"><div class="bar-fill" style="width:${barW}%;background:${color}"></div></div>
+            <div class="breakdown-pct">${pct.toFixed(1)}%</div>
+          </div>`;
+      }
+
+      return `
+        <div class="score-breakdown">
+          <div class="section-label">Score breakdown &mdash; how the raw score is computed</div>
+          ${brow('PR Impact',     '#0369a1', (eng.tier_score||0).toFixed(1),          '0.5', tierC, raw)}
+          ${brow('Collaboration', '#15803d', (eng.collaboration_score||0).toFixed(3), '0.3', collC, raw)}
+          ${brow('Code Quality',  '#7c3aed', (eng.avg_structural_score||0).toFixed(3),'0.2', qualC, raw)}
+          <div class="breakdown-divider"></div>
+          <div class="breakdown-total">
+            <span>Raw total: <strong>${raw.toFixed(3)}</strong></span>
+            <span class="breakdown-norm">
+              &divide; top score (${maxRawScore.toFixed(3)}) &times; 100
+              = <strong class="fc-high">${(eng.normalized_score||0).toFixed(1)}</strong>
+            </span>
+          </div>
+        </div>`;
+    }
+
+    function makeCard(eng, rank, maxRawScore) {
+      const narrative = NARRATIVES[eng.author] || '';
+      const tiers     = eng.impact_tiers    || {};
+      const cats      = eng.work_categories || {};
+      const rankClass = rank <= 3 ? `rank-${rank}` : '';
+      const score     = (eng.normalized_score || 0).toFixed(1);
+
+      const prs = (eng.highlight_prs || []).slice(0, 3).map(pr => {
+        const tier = (pr.impact_tier || 'low').toLowerCase();
+        const url  = `https://github.com/PostHog/posthog/pull/${pr.number}`;
+        return `
+          <div class="pr-item">
+            <div class="pr-top">
+              <span class="tier-badge ${esc(tier)}">${tier.toUpperCase()}</span>
+              <a class="pr-link" href="${esc(url)}" target="_blank" rel="noopener">
+                #${pr.number} ${esc((pr.title || '').slice(0, 80))}
+              </a>
+            </div>
+            ${pr.rationale ? `<div class="pr-rationale">${esc(pr.rationale)}</div>` : ''}
+          </div>`;
+      }).join('');
+
+      return `
+        <div class="eng-card">
+
+          <div class="card-top">
+            <div class="rank-badge ${rankClass}">${rank}</div>
+            <img class="avatar"
+                 src="https://github.com/${esc(eng.author)}.png?size=80"
+                 alt="${esc(eng.author)}" loading="lazy"
+                 onerror="this.onerror=null;this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 40 40%22%3E%3Crect fill=%22%23e2e8f0%22 width=%2240%22 height=%2240%22/%3E%3C/svg%3E'" />
+            <div class="eng-identity">
+              <div class="eng-name">${esc(eng.author)}</div>
+              <div class="score-label">impact score &mdash; relative to #1 contributor</div>
+            </div>
+            <div class="eng-score">${score}</div>
+          </div>
+
+          <div class="score-progress" title="${score} = ${(eng.final_score||0).toFixed(3)} / top × 100">
+            <div class="score-progress-fill" style="width:${score}%"></div>
+          </div>
+
+          <div class="stats-row">
+            <span><strong>${eng.pr_count      || 0}</strong> PRs merged</span>
+            <span><strong>${eng.reviews_given || 0}</strong> reviews given</span>
+            <span><strong>${eng.distinct_authors_reviewed || 0}</strong> authors reviewed</span>
+          </div>
+
+          ${tierSection(tiers)}
+
+          ${scoreBreakdown(eng, maxRawScore)}
+
+          ${workFocus(cats)}
+
+          ${narrative ? `<div class="narrative">${esc(narrative)}</div>` : ''}
+
+          <hr class="divider" />
+
+          <div class="pr-section">
+            <div class="pr-label">Highlight PRs</div>
+            ${prs || '<div class="narrative">No PRs scored.</div>'}
+          </div>
+
+        </div>`;
     }
 
     function renderDashboard() {
-      const root = document.getElementById("root");
-      const meta = TOP5.metadata || {};
-      const date = new Date().toLocaleDateString("en-US", { month: "long", year: "numeric" });
+      const top5 = TOP5.top_5 || [];
 
-      root.innerHTML = `
-        <header class="site-header">
-          <h1>PostHog Engineering Impact &mdash; Top 5 Contributors (90 days)</h1>
-          <p>Evaluated on code influence, collaboration, and reliability &nbsp;&middot;&nbsp; ${date}</p>
-        </header>
-        <div class="cards-grid" id="cards-grid"></div>
-        <section class="methodology">
-          <h3>Methodology</h3>
-          <p><strong>Scoring pipeline:</strong> Each merged PR was assigned
-          structural signals — review depth, file diversity, linked issues, and label
-          weights — producing a combined heuristic score. An LLM then categorised
-          each PR and assigned a <strong>high / medium / low</strong> impact tier.
-          Engineer scores combine tier-weighted PR volume (50 %), collaboration
-          activity (30 %), and structural heuristics (20 %).</p>
-          <p><strong>High impact</strong> means the PR touched critical code paths,
-          attracted substantive reviewer scrutiny, closed tracked issues, or carried
-          a bug-fix, security, or performance label.</p>
-          <p><strong>Data window:</strong> Merged PRs in the last 90 days from the
-          public <a href="https://github.com/PostHog/posthog" target="_blank"
-          rel="noopener">PostHog/posthog</a> repository on GitHub. Dependency bumps,
-          doc-only edits under 20 lines, and bot PRs are excluded before scoring.</p>
-        </section>`;
-
-      const grid    = document.getElementById("cards-grid");
-      const charts  = [];
-
-      (TOP5.top_5 || []).forEach((eng, i) => {
-        const rank = i + 1;
-        grid.insertAdjacentHTML("beforeend", makeCard(eng, rank));
-
-        const tiers = eng.impact_tiers || {};
-        charts.push({
-          tierId:  `tier-${rank}`,
-          catId:   `cat-${rank}`,
-          tierLabels: ["High", "Medium", "Low"],
-          tierData:   [tiers.high||0, tiers.medium||0, tiers.low||0],
-          tierColors: [TIER_COLORS.high, TIER_COLORS.medium, TIER_COLORS.low],
-          catEntries: Object.entries(eng.work_categories || {}).slice(0, 7),
-        });
+      // Normalization: top engineer = 100
+      const maxRaw = Math.max(...top5.map(e => e.final_score || 0), 1);
+      top5.forEach(e => {
+        if (e.normalized_score == null)
+          e.normalized_score = Math.round((e.final_score / maxRaw) * 1000) / 10;
       });
 
-      // Initialise charts after all cards are in the DOM
-      charts.forEach(({ tierId, catId, tierLabels, tierData, tierColors, catEntries }) => {
-        initDoughnut(tierId, tierLabels, tierData, tierColors);
+      const date = new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+      document.getElementById('root').innerHTML = `
+        <div class="wrapper">
+          <header class="site-header">
+            <h1>PostHog Engineering Impact &mdash; Top 5 Contributors (90 days)</h1>
+            <span class="header-date">${date}</span>
+          </header>
+          <div class="formula-bar">
+            <span class="formula-label">Ranking formula</span>
+            <span class="formula-sep">|</span>
+            <span class="formula-eq fw">Raw score</span>
+            <span class="formula-eq">=</span>
+            <span class="formula-eq">(<span class="fw fc-blue">PR Impact</span> &times; 0.5)</span>
+            <span class="formula-eq">+</span>
+            <span class="formula-eq">(<span class="fw fc-green">Collaboration</span> &times; 0.3)</span>
+            <span class="formula-eq">+</span>
+            <span class="formula-eq">(<span class="fw fc-purple">Code Quality</span> &times; 0.2)</span>
+            <span class="formula-sep">|</span>
+            <span class="formula-eq fw">Score</span>
+            <span class="formula-eq">= raw &divide; top raw &times; 100&nbsp;&nbsp;(top contributor = 100 by definition)</span>
+          </div>
+          <div class="engineers-row" id="engineers-row"></div>
+        </div>`;
 
-        const catLabels = catEntries.map(([k]) => catName(k));
-        const catData   = catEntries.map(([, v]) => Math.round(v * 1000) / 10);
-        const catColors = catEntries.map(([k]) => CAT_COLORS[k] || CAT_COLORS.unknown);
-        initDoughnut(catId, catLabels, catData, catColors);
-      });
+      const row = document.getElementById('engineers-row');
+      top5.forEach((eng, i) => row.insertAdjacentHTML('beforeend', makeCard(eng, i + 1, maxRaw)));
     }
 
-    document.addEventListener("DOMContentLoaded", renderDashboard);
+    document.addEventListener('DOMContentLoaded', renderDashboard);
   </script>
 </body>
 </html>
