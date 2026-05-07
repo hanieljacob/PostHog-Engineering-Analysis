@@ -14,8 +14,8 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Optional
 
-INPUT_FILE = "merged_prs.json"
-OUTPUT_FILE = "structural_scores.json"
+INPUT_FILE = "outputs/merged_prs.json"
+OUTPUT_FILE = "outputs/structural_scores.json"
 
 # ── Bot detection ─────────────────────────────────────────────────────────────
 

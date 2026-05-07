@@ -12,8 +12,8 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
-INPUT_FILE = "structural_scores.json"
-OUTPUT_FILE = "top_candidates.json"
+INPUT_FILE = "outputs/structural_scores.json"
+OUTPUT_FILE = "outputs/top_candidates.json"
 TOP_N = 20
 
 

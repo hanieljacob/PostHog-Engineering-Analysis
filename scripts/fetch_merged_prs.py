@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """
 Fetch merged PRs from PostHog/posthog (last 90 days) via GitHub GraphQL API.
-Output: merged_prs.json
+Output: outputs/merged_prs.json
+
+Uses the repository pullRequests connection (no 1,000-result cap).
 
 Usage:
-    python fetch_merged_prs.py   # reads GITHUB_TOKEN from .env
+    python scripts/fetch_merged_prs.py   # reads GITHUB_TOKEN from .env
 """
 
 from __future__ import annotations
@@ -15,7 +17,7 @@ import re
 import sys
 import time
 from datetime import datetime, timedelta, timezone
-from typing import Any, Optional
+from typing import Optional
 from pathlib import Path
 
 import requests
@@ -46,79 +48,84 @@ HEADERS = {
     "Authorization": f"Bearer {GITHUB_TOKEN}",
     "Content-Type": "application/json",
 }
-OUTPUT_FILE = "merged_prs.json"
-SINCE_DATE = (datetime.now(timezone.utc) - timedelta(days=90)).strftime("%Y-%m-%d")
+OUTPUT_FILE      = "outputs/merged_prs.json"
+CHECKPOINT_FILE  = "outputs/fetch_checkpoint.json"
+SINCE_DT   = datetime.now(timezone.utc) - timedelta(days=90)
+SINCE_DATE = SINCE_DT.strftime("%Y-%m-%d")
 
 # ── GraphQL queries ───────────────────────────────────────────────────────────
 
-# Date is embedded at module load time; only $cursor is a runtime variable.
-SEARCH_QUERY = f"""
-query FetchMergedPRs($cursor: String) {{
-  rateLimit {{
+# Uses repository.pullRequests (no 1,000-result cap unlike the search API).
+# Ordered by UPDATED_AT DESC. Since updatedAt >= mergedAt always, once we see
+# updatedAt < SINCE_DT we know all subsequent PRs were also merged before the
+# cutoff, so we can stop. We filter each node by mergedAt before keeping it.
+PR_QUERY = """
+query FetchMergedPRs($cursor: String) {
+  rateLimit {
     remaining
     resetAt
-  }}
-  search(
-    query: "repo:PostHog/posthog is:pr is:merged merged:>={SINCE_DATE}"
-    type: ISSUE
-    first: 20
-    after: $cursor
-  ) {{
-    pageInfo {{
-      hasNextPage
-      endCursor
-    }}
-    issueCount
-    nodes {{
-      ... on PullRequest {{
+  }
+  repository(owner: "PostHog", name: "posthog") {
+    pullRequests(
+      states: MERGED
+      first: 50
+      after: $cursor
+      orderBy: {field: UPDATED_AT, direction: DESC}
+    ) {
+      pageInfo {
+        hasNextPage
+        endCursor
+      }
+      nodes {
         id
         number
         title
         body
         createdAt
         mergedAt
-        author {{
+        updatedAt
+        author {
           login
-        }}
-        labels(first: 20) {{
-          nodes {{
+        }
+        labels(first: 20) {
+          nodes {
             name
-          }}
-        }}
-        reviews(first: 100) {{
+          }
+        }
+        reviews(first: 100) {
           totalCount
-          nodes {{
-            author {{
+          nodes {
+            author {
               login
-            }}
+            }
             state
-          }}
-        }}
-        reviewThreads(first: 1) {{
+          }
+        }
+        reviewThreads(first: 1) {
           totalCount
-        }}
-        files(first: 100) {{
+        }
+        files(first: 100) {
           totalCount
-          pageInfo {{
+          pageInfo {
             hasNextPage
             endCursor
-          }}
-          nodes {{
+          }
+          nodes {
             path
             additions
             deletions
-          }}
-        }}
-        closingIssuesReferences(first: 20) {{
-          nodes {{
+          }
+        }
+        closingIssuesReferences(first: 20) {
+          nodes {
             number
             title
-          }}
-        }}
-      }}
-    }}
-  }}
-}}
+          }
+        }
+      }
+    }
+  }
+}
 """
 
 FILES_QUERY = """
@@ -185,7 +192,6 @@ def run_query(query: str, variables: Optional[dict] = None, max_retries: int = 6
                         break
                 if rate_limited:
                     continue
-                # Partial data with non-rate-limit errors: surface and raise
                 raise RuntimeError(f"GraphQL errors: {payload['errors']}")
 
             data: dict = payload.get("data") or {}
@@ -279,7 +285,6 @@ def process_pr(node: dict) -> dict:
     merged_dt = datetime.fromisoformat(node["mergedAt"].replace("Z", "+00:00"))
     merge_hours = (merged_dt - created_dt).total_seconds() / 3600
 
-    # Reviews (first 100 from search query)
     review_nodes: list = node["reviews"]["nodes"]
     review_total: int = node["reviews"]["totalCount"]
     distinct_reviewers = {
@@ -287,11 +292,9 @@ def process_pr(node: dict) -> dict:
     }
     changes_requested = any(r["state"] == "CHANGES_REQUESTED" for r in review_nodes)
 
-    # Files (first 100; pagination handled later)
     file_nodes: list = node["files"]["nodes"]
     files_page_info: dict = node["files"]["pageInfo"]
 
-    # Linked issues: merge GraphQL closing refs + body-parsed refs
     closing_refs = [
         {"number": i["number"], "title": i["title"]}
         for i in node["closingIssuesReferences"]["nodes"]
@@ -337,36 +340,71 @@ def process_pr(node: dict) -> dict:
     }
 
 
+# ── Checkpoint helpers ────────────────────────────────────────────────────────
+
+def load_checkpoint() -> tuple[list[dict], Optional[str]]:
+    """Return (accumulated_prs, resume_cursor) from a saved checkpoint, or start fresh."""
+    p = Path(CHECKPOINT_FILE)
+    if not p.exists():
+        return [], None
+    try:
+        with open(p, encoding="utf-8") as f:
+            data = json.load(f)
+        if data.get("since_date") != SINCE_DATE:
+            print("  Checkpoint is from a different date window — starting fresh.", flush=True)
+            return [], None
+        prs = data.get("prs", [])
+        cursor = data.get("cursor")
+        print(f"  Resuming from checkpoint: {len(prs)} PRs already fetched.", flush=True)
+        return prs, cursor
+    except Exception:
+        print("  Checkpoint unreadable — starting fresh.", flush=True)
+        return [], None
+
+
+def save_checkpoint(prs: list[dict], cursor: Optional[str]) -> None:
+    tmp = CHECKPOINT_FILE + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump({"since_date": SINCE_DATE, "cursor": cursor, "prs": prs}, f)
+    Path(tmp).replace(CHECKPOINT_FILE)
+
+
+def clear_checkpoint() -> None:
+    p = Path(CHECKPOINT_FILE)
+    if p.exists():
+        p.unlink()
+
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main() -> None:
     print(f"Fetching merged PRs from PostHog/posthog since {SINCE_DATE}…", flush=True)
 
-    prs: list[dict] = []
-    cursor: Optional[str] = None
-    total_expected: Optional[int] = None
+    prs, cursor = load_checkpoint()
 
-    # ── Phase 1: paginate the PR search ──────────────────────────────────────
+    # ── Phase 1: paginate pullRequests, stop when updatedAt passes the cutoff ─
+    # updatedAt >= mergedAt always, so once updatedAt < SINCE_DT all remaining
+    # PRs were also merged before the window. Filter each node by mergedAt.
     while True:
-        data = run_query(SEARCH_QUERY, {"cursor": cursor})
-        search = data["search"]
+        data = run_query(PR_QUERY, {"cursor": cursor})
+        page = data["repository"]["pullRequests"]
 
-        if total_expected is None:
-            total_expected = search["issueCount"]
-            print(f"  Total PRs reported by API: {total_expected}", flush=True)
+        cutoff_reached = False
+        for node in page["nodes"]:
+            updated_dt = datetime.fromisoformat(node["updatedAt"].replace("Z", "+00:00"))
+            if updated_dt < SINCE_DT:
+                cutoff_reached = True
+                break
+            merged_dt = datetime.fromisoformat(node["mergedAt"].replace("Z", "+00:00"))
+            if merged_dt >= SINCE_DT:
+                prs.append(process_pr(node))
 
-        for node in search["nodes"]:
-            # The search API can return Issue nodes; skip them
-            if "number" not in node or "mergedAt" not in node:
-                continue
-            prs.append(process_pr(node))
+        cursor = page["pageInfo"]["endCursor"]
+        save_checkpoint(prs, cursor)
+        print(f"  Fetched {len(prs)} PRs…", end="\r", flush=True)
 
-        print(f"  Fetched {len(prs)} / {total_expected} PRs…", end="\r", flush=True)
-
-        page_info = search["pageInfo"]
-        if not page_info["hasNextPage"]:
+        if cutoff_reached or not page["pageInfo"]["hasNextPage"]:
             break
-        cursor = page_info["endCursor"]
 
     print(f"\n  Done fetching: {len(prs)} PRs.", flush=True)
 
@@ -425,9 +463,9 @@ def main() -> None:
     with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
         json.dump(prs, f, indent=2, ensure_ascii=False)
 
+    clear_checkpoint()
     print(f"\nWrote {len(prs)} PRs to {OUTPUT_FILE}", flush=True)
 
-    # Summary
     reverted = sum(1 for pr in prs if pr["reverted"])
     avg_hours = sum(pr["merge_time_hours"] for pr in prs) / len(prs) if prs else 0
     total_files = sum(pr["files_changed_count"] for pr in prs)

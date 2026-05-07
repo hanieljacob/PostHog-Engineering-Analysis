@@ -1,2 +1,5 @@
 .env
+.claude
 merged_prs.json
+/outputs
+/sessions

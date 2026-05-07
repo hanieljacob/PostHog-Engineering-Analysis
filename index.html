@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PostHog Engineering Impact — Top 5 Contributors</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --high:    #0ea5e9;
+      --medium:  #f97316;
+      --low:     #94a3b8;
+      --bg:      #f1f5f9;
+      --card:    #ffffff;
+      --border:  #e2e8f0;
+      --text:    #0f172a;
+      --muted:   #64748b;
+      --radius:  12px;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      padding: 28px 24px 48px;
+      line-height: 1.5;
+    }
+
+    /* ── Header ── */
+    .site-header { text-align: center; margin-bottom: 32px; }
+    .site-header h1 {
+      font-size: 1.45rem; font-weight: 800; letter-spacing: -0.02em;
+    }
+    .site-header p { color: var(--muted); margin-top: 5px; font-size: 0.88rem; }
+
+    /* ── Grid ── */
+    .cards-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      max-width: 1180px;
+      margin: 0 auto;
+    }
+    .cards-grid .card:first-child { grid-column: 1 / -1; }
+
+    /* ── Card ── */
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 22px;
+    }
+
+    /* ── Card header row ── */
+    .card-head {
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+      margin-bottom: 18px;
+    }
+    .rank-badge {
+      min-width: 30px; height: 30px;
+      border-radius: 50%;
+      background: #334155; color: #fff;
+      font-weight: 800; font-size: 0.85rem;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; margin-top: 2px;
+    }
+    .rank-1 { background: #f59e0b; }
+    .rank-2 { background: #94a3b8; }
+    .rank-3 { background: #b45309; }
+    .avatar {
+      width: 52px; height: 52px;
+      border-radius: 50%;
+      border: 2px solid var(--border);
+      flex-shrink: 0;
+      background: var(--border);
+    }
+    .eng-meta { flex: 1; min-width: 0; }
+    .eng-name  { font-size: 1.05rem; font-weight: 700; }
+    .narrative { font-size: 0.80rem; color: var(--muted); margin-top: 3px; line-height: 1.45; }
+    .score-block { text-align: right; flex-shrink: 0; }
+    .score-value { font-size: 1.6rem; font-weight: 800; color: var(--high); line-height: 1; }
+    .score-label { font-size: 0.68rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+
+    /* ── Divider ── */
+    .divider { border: none; border-top: 1px solid var(--border); margin: 14px 0; }
+
+    /* ── Charts ── */
+    .charts-row {
+      display: flex;
+      gap: 24px;
+      margin-bottom: 14px;
+      align-items: flex-start;
+    }
+    .chart-block { flex: 1; min-width: 0; }
+    .chart-label {
+      font-size: 0.68rem; font-weight: 700;
+      text-transform: uppercase; letter-spacing: .05em;
+      color: var(--muted); margin-bottom: 8px;
+    }
+    .chart-wrap { display: flex; justify-content: center; }
+    .chart-legend {
+      display: flex; flex-wrap: wrap; gap: 6px 14px;
+      margin-top: 8px; justify-content: center;
+    }
+    .legend-item { display: flex; align-items: center; gap: 5px; font-size: 0.72rem; color: var(--muted); }
+    .legend-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+
+    /* ── Stats row ── */
+    .stats-row {
+      font-size: 0.80rem; color: var(--muted);
+      margin-bottom: 14px;
+      display: flex; flex-wrap: wrap; gap: 4px 20px;
+    }
+    .stat-item strong { color: var(--text); font-weight: 700; }
+
+    /* ── Highlight PRs ── */
+    .pr-section h4 {
+      font-size: 0.68rem; font-weight: 700;
+      text-transform: uppercase; letter-spacing: .05em;
+      color: var(--muted); margin-bottom: 10px;
+    }
+    .pr-item {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      grid-template-rows: auto auto;
+      column-gap: 10px;
+      row-gap: 2px;
+      margin-bottom: 10px;
+      align-items: baseline;
+    }
+    .tier-badge {
+      padding: 2px 8px; border-radius: 4px;
+      font-size: 0.62rem; font-weight: 700;
+      text-transform: uppercase; letter-spacing: .05em;
+      white-space: nowrap;
+    }
+    .tier-badge.high   { background: #e0f2fe; color: #0369a1; }
+    .tier-badge.medium { background: #fff7ed; color: #c2410c; }
+    .tier-badge.low    { background: #f1f5f9; color: #475569; }
+    .pr-link {
+      color: var(--text); font-size: 0.83rem; font-weight: 500;
+      text-decoration: none; line-height: 1.4;
+    }
+    .pr-link:hover { color: var(--high); text-decoration: underline; }
+    .pr-rationale {
+      grid-column: 2; font-size: 0.76rem; color: var(--muted); line-height: 1.4;
+    }
+
+    /* ── Methodology ── */
+    .methodology {
+      max-width: 1180px; margin: 28px auto 0;
+      padding: 20px 24px;
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--radius);
+    }
+    .methodology h3 {
+      font-size: 0.68rem; font-weight: 700;
+      text-transform: uppercase; letter-spacing: .08em;
+      color: var(--muted); margin-bottom: 10px;
+    }
+    .methodology p { font-size: 0.82rem; color: var(--muted); line-height: 1.6; margin-bottom: 6px; }
+    .methodology p:last-child { margin-bottom: 0; }
+    .methodology strong { color: var(--text); }
+    .methodology a { color: var(--high); }
+
+    @media (max-width: 760px) {
+      .cards-grid { grid-template-columns: 1fr; }
+      .cards-grid .card:first-child { grid-column: auto; }
+      .charts-row { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+  <script>
+    window.__TOP5__       = {"top_5": [{"rank": 1, "author": "pauldambra", "final_score": 71.1329, "tier_score": 142.0, "collaboration_score": 0.306, "avg_structural_score": 0.2054, "impact_tiers": {"high": 17, "medium": 53, "low": 23}, "work_categories": {"performance": 0.409, "feature": 0.215, "refactor": 0.172, "bug_fix": 0.129, "cleanup": 0.065, "security": 0.011}, "pr_count": 93, "non_trivial_pr_count": 85, "llm_scored_pr_count": 93, "reviews_given": 102, "distinct_authors_reviewed": 13, "highlight_prs": [{"number": 57625, "title": "fix(subscriptions): sanitise user text in AI summary prompts", "impact_tier": "high", "category": "security", "rationale": "The PR fixes a critical security vulnerability that allows users to inject malicious code into AI summary prompts, which could lead to serious security breaches."}, {"number": 56758, "title": "fix(kea): break logic graph cycles after unmount via cycleBreaker plugin", "impact_tier": "high", "category": "bug_fix", "rationale": "The PR fixes a memory leak issue that causes the entire connected graph of logic instances to stay alive even after unmounting, leading to significant performance degradation."}, {"number": 57399, "title": "perf(organization): cache OrganizationSerializer teams and projects per (user, org)", "impact_tier": "high", "category": "performance", "rationale": "The PR significantly optimizes the loading time by caching OrganizationSerializer teams and projects per user and organization, reducing the dominant time-consuming operations in production traces."}]}, {"rank": 2, "author": "sampennington", "final_score": 59.0854, "tier_score": 118.0, "collaboration_score": 0.171, "avg_structural_score": 0.1704, "impact_tiers": {"high": 13, "medium": 49, "low": 11}, "work_categories": {"refactor": 0.384, "feature": 0.274, "bug_fix": 0.192, "performance": 0.068, "documentation": 0.027, "cleanup": 0.014, "test": 0.014, "refactor|cleanup": 0.014, "bug_fix|feature": 0.014}, "pr_count": 73, "non_trivial_pr_count": 73, "llm_scored_pr_count": 73, "reviews_given": 57, "distinct_authors_reviewed": 6, "highlight_prs": [{"number": 57258, "title": "feat(insights): add sessionPropertyPreAggregation modifier", "impact_tier": "high", "category": "performance", "rationale": "The PR significantly improves query performance by reducing memory usage for trends queries with session breakdown and filters, thus preventing out-of-memory errors."}, {"number": 57671, "title": "fix(data-warehouse): guard databaseTableListLogic loader after await", "impact_tier": "high", "category": "bug_fix", "rationale": "This PR fixes a critical bug that causes a path-not-found error, which can lead to application crashes and data inconsistencies."}, {"number": 57488, "title": "feat(hog-charts): add trendLines + comparisonOf config to TimeSeriesLineChart", "impact_tier": "high", "category": "feature", "rationale": "This PR adds significant new functionality to the TimeSeriesLineChart, including trend lines and comparison of config options, which will likely have a high impact on users."}]}, {"rank": 3, "author": "posthog", "final_score": 58.2876, "tier_score": 116.5, "collaboration_score": 0.009, "avg_structural_score": 0.1745, "impact_tiers": {"high": 28, "medium": 21, "low": 2}, "work_categories": {"bug_fix": 0.686, "feature": 0.176, "refactor": 0.059, "performance": 0.039, "security": 0.02, "bug_fix|feature": 0.02}, "pr_count": 51, "non_trivial_pr_count": 51, "llm_scored_pr_count": 51, "reviews_given": 3, "distinct_authors_reviewed": 2, "highlight_prs": [{"number": 57106, "title": "feat(dashboards): server-side fuzzy full-text search via API", "impact_tier": "high", "category": "feature", "rationale": "This PR introduces a significant improvement to the dashboard search functionality, enabling server-side fuzzy full-text search via API, which is expected to have a substantial impact on user experience and productivity."}, {"number": 57614, "title": "fix(slack-app): include block text from thread root in agent context", "impact_tier": "high", "category": "bug_fix", "rationale": "This PR fixes a critical bug that affects user experience and data accuracy, with potential consequences for task descriptions."}, {"number": 57261, "title": "feat(mcp): add feedback-submit tool for agent feedback", "impact_tier": "high", "category": "feature", "rationale": "This PR introduces a new tool for structured agent feedback, which will significantly improve the quality of user experience and help identify issues in the MCP server."}]}, {"rank": 4, "author": "webjunkie", "final_score": 55.5697, "tier_score": 111.0, "collaboration_score": 0.093, "avg_structural_score": 0.2092, "impact_tiers": {"high": 30, "medium": 12, "low": 6}, "work_categories": {"bug_fix": 0.396, "refactor": 0.208, "performance": 0.188, "documentation": 0.083, "feature": 0.083, "security": 0.021, "infrastructure": 0.021}, "pr_count": 50, "non_trivial_pr_count": 48, "llm_scored_pr_count": 48, "reviews_given": 31, "distinct_authors_reviewed": 13, "highlight_prs": [{"number": 56551, "title": "fix(visual-review): verify upload hash integrity server-side", "impact_tier": "high", "category": "security", "rationale": "This PR introduces server-side hash verification to prevent potential attacks on the system's integrity, which is a high-impact security fix."}, {"number": 56860, "title": "fix(api): emit OpenAPI 3.0 valid spec, add consistency lint", "impact_tier": "high", "category": "bug_fix", "rationale": "This PR fixes critical OpenAPI spec bugs that could lead to downstream issues, and also improves consistency linting."}, {"number": 56868, "title": "feat(visual-review): snapshot history detail and run scene", "impact_tier": "high", "category": "feature", "rationale": "This PR introduces a new feature that significantly enhances the user experience by providing a detailed history of snapshot changes, which is likely to have a high impact on the project's functionality and usability."}]}, {"rank": 5, "author": "jonmcwest", "final_score": 39.788, "tier_score": 79.5, "collaboration_score": 0.018, "avg_structural_score": 0.1631, "impact_tiers": {"high": 21, "medium": 11, "low": 0}, "work_categories": {"bug_fix": 0.344, "performance": 0.281, "feature": 0.25, "refactor": 0.094, "bug_fix|feature": 0.031}, "pr_count": 32, "non_trivial_pr_count": 32, "llm_scored_pr_count": 32, "reviews_given": 6, "distinct_authors_reviewed": 3, "highlight_prs": [{"number": 57361, "title": "fix(logs-alerting): per-alert fallback when cohort query or save fails", "impact_tier": "high", "category": "bug_fix", "rationale": "This PR fixes a regression that caused all alerts to be disabled when one alert's predicate timed out, which could lead to significant downtime and data loss."}, {"number": 57271, "title": "feat(logs): instant draft alerts with inline configuration", "impact_tier": "high", "category": "feature", "rationale": "This PR introduces a significant improvement to the user experience, reducing complexity and making it easier for users to create logs alerts."}, {"number": 57311, "title": "perf(logs-alerting): batch alert checks and saves per team", "impact_tier": "high", "category": "performance", "rationale": "This PR optimizes database queries and reduces the cost of evaluating alerts, which can lead to significant performance improvements in a production environment."}]}], "full_ranking": [{"rank": 1, "author": "pauldambra", "final_score": 71.1329, "tier_score": 142.0, "pr_count": 93, "impact_tiers": {"high": 17, "medium": 53, "low": 23}}, {"rank": 2, "author": "sampennington", "final_score": 59.0854, "tier_score": 118.0, "pr_count": 73, "impact_tiers": {"high": 13, "medium": 49, "low": 11}}, {"rank": 3, "author": "posthog", "final_score": 58.2876, "tier_score": 116.5, "pr_count": 51, "impact_tiers": {"high": 28, "medium": 21, "low": 2}}, {"rank": 4, "author": "webjunkie", "final_score": 55.5697, "tier_score": 111.0, "pr_count": 50, "impact_tiers": {"high": 30, "medium": 12, "low": 6}}, {"rank": 5, "author": "jonmcwest", "final_score": 39.788, "tier_score": 79.5, "pr_count": 32, "impact_tiers": {"high": 21, "medium": 11, "low": 0}}, {"rank": 6, "author": "rnegron", "final_score": 32.0611, "tier_score": 64.0, "pr_count": 27, "impact_tiers": {"high": 19, "medium": 3, "low": 5}}, {"rank": 7, "author": "jurajmajerik", "final_score": 25.2826, "tier_score": 50.5, "pr_count": 27, "impact_tiers": {"high": 10, "medium": 12, "low": 5}}, {"rank": 8, "author": "Gilbert09", "final_score": 23.2992, "tier_score": 46.5, "pr_count": 20, "impact_tiers": {"high": 13, "medium": 4, "low": 3}}, {"rank": 9, "author": "richardsolomou", "final_score": 21.0624, "tier_score": 42.0, "pr_count": 17, "impact_tiers": {"high": 11, "medium": 6, "low": 0}}, {"rank": 10, "author": "MattBro", "final_score": 21.0499, "tier_score": 42.0, "pr_count": 16, "impact_tiers": {"high": 12, "medium": 4, "low": 0}}, {"rank": 11, "author": "haacked", "final_score": 19.5491, "tier_score": 39.0, "pr_count": 16, "impact_tiers": {"high": 10, "medium": 6, "low": 0}}, {"rank": 12, "author": "MarconLP", "final_score": 18.5487, "tier_score": 37.0, "pr_count": 17, "impact_tiers": {"high": 9, "medium": 6, "low": 2}}, {"rank": 13, "author": "skoob13", "final_score": 17.7976, "tier_score": 35.5, "pr_count": 19, "impact_tiers": {"high": 6, "medium": 11, "low": 2}}, {"rank": 14, "author": "tatoalo", "final_score": 16.8072, "tier_score": 33.5, "pr_count": 17, "impact_tiers": {"high": 6, "medium": 10, "low": 1}}, {"rank": 15, "author": "lricoy", "final_score": 16.3119, "tier_score": 32.5, "pr_count": 16, "impact_tiers": {"high": 7, "medium": 7, "low": 2}}, {"rank": 16, "author": "veryayskiy", "final_score": 14.299, "tier_score": 28.5, "pr_count": 18, "impact_tiers": {"high": 3, "medium": 12, "low": 3}}, {"rank": 17, "author": "mp-hog", "final_score": 12.8045, "tier_score": 25.5, "pr_count": 13, "impact_tiers": {"high": 4, "medium": 9, "low": 0}}, {"rank": 18, "author": "a-lider", "final_score": 12.0618, "tier_score": 24.0, "pr_count": 11, "impact_tiers": {"high": 5, "medium": 6, "low": 0}}, {"rank": 19, "author": "andrewm4894", "final_score": 12.0564, "tier_score": 24.0, "pr_count": 12, "impact_tiers": {"high": 4, "medium": 8, "low": 0}}, {"rank": 20, "author": "ablaszkiewicz", "final_score": 6.083, "tier_score": 12.0, "pr_count": 6, "impact_tiers": {"high": 2, "medium": 4, "low": 0}}], "metadata": {"ranked_at": "2026-05-07T17:13:46Z", "evaluation_period_days": 90, "engineers_evaluated": 20, "total_llm_scored_prs": 549}};
+    window.__NARRATIVES__ = {"narratives": {"pauldambra": "High-impact engineer delivering critical security, performance, and feature enhancements to drive platform stability and efficiency.", "sampennington": "High-impact engineer delivering significant performance and feature enhancements to PostHog's core analytics capabilities.", "posthog": "Delivering high-impact contributions, primarily through bug fixes and feature enhancements, to enhance user experience and productivity.", "webjunkie": "Delivering high-impact security and functionality enhancements through diligent coding and peer review.", "jonmcwest": "High-impact engineer delivering critical bug fixes, features, and performance optimizations to PostHog's logging and alerting capabilities."}};
+  </script>
+  <div id="root"></div>
+  <script>
+    "use strict";
+    const TOP5       = window.__TOP5__       || { top_5: [], metadata: {} };
+    const NARRATIVES = (window.__NARRATIVES__ || {}).narratives || {};
+
+    const TIER_COLORS = { high: "#0ea5e9", medium: "#f97316", low: "#94a3b8" };
+    const CAT_COLORS  = {
+      bug_fix:        "#ef4444",
+      feature:        "#3b82f6",
+      performance:    "#10b981",
+      refactor:       "#8b5cf6",
+      infrastructure: "#f59e0b",
+      security:       "#dc2626",
+      cleanup:        "#94a3b8",
+      documentation:  "#6366f1",
+      unknown:        "#d1d5db",
+    };
+
+    function esc(s) {
+      return String(s ?? "")
+        .replace(/&/g, "&amp;").replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    }
+
+    function catName(k) { return k.replace(/_/g, " "); }
+
+    function legendHTML(labels, colors) {
+      return labels.map((l, i) =>
+        `<span class="legend-item">
+           <span class="legend-dot" style="background:${colors[i]}"></span>${esc(l)}
+         </span>`
+      ).join("");
+    }
+
+    function makeCard(eng, rank) {
+      const narrative   = NARRATIVES[eng.author] || "";
+      const tiers       = eng.impact_tiers     || {};
+      const cats        = eng.work_categories  || {};
+      const tierId      = `tier-${rank}`;
+      const catId       = `cat-${rank}`;
+      const rankClass   = rank <= 3 ? `rank-${rank}` : "";
+
+      // Tier legend (H / M / L counts)
+      const tierLegend  = [
+        `<span class="legend-item"><span class="legend-dot" style="background:${TIER_COLORS.high}"></span>High: ${tiers.high||0}</span>`,
+        `<span class="legend-item"><span class="legend-dot" style="background:${TIER_COLORS.medium}"></span>Med: ${tiers.medium||0}</span>`,
+        `<span class="legend-item"><span class="legend-dot" style="background:${TIER_COLORS.low}"></span>Low: ${tiers.low||0}</span>`,
+      ].join("");
+
+      // Category legend (top 5)
+      const catEntries  = Object.entries(cats).slice(0, 6);
+      const catLegend   = catEntries.map(([k, v]) =>
+        `<span class="legend-item">
+           <span class="legend-dot" style="background:${CAT_COLORS[k]||CAT_COLORS.unknown}"></span>
+           ${esc(catName(k))} ${Math.round(v*100)}%
+         </span>`
+      ).join("");
+
+      // Stats
+      const stats = [
+        `<span class="stat-item"><strong>${eng.pr_count||0}</strong> PRs</span>`,
+        `<span class="stat-item"><strong>${eng.non_trivial_pr_count||0}</strong> substantive</span>`,
+        `<span class="stat-item"><strong>${eng.reviews_given||0}</strong> reviews given</span>`,
+        `<span class="stat-item"><strong>${eng.distinct_authors_reviewed||0}</strong> authors reviewed</span>`,
+        `<span class="stat-item">tier score <strong>${(eng.tier_score||0).toFixed(1)}</strong></span>`,
+      ].join("");
+
+      // Highlight PRs
+      const prs = (eng.highlight_prs || []).map(pr => {
+        const tier = (pr.impact_tier || "low").toLowerCase();
+        const url  = `https://github.com/PostHog/posthog/pull/${pr.number}`;
+        return `
+          <div class="pr-item">
+            <span class="tier-badge ${esc(tier)}">${tier.toUpperCase()}</span>
+            <a class="pr-link" href="${esc(url)}" target="_blank" rel="noopener">
+              #${pr.number} ${esc((pr.title||"").slice(0,90))}
+            </a>
+            ${pr.rationale
+              ? `<span class="pr-rationale">${esc(pr.rationale)}</span>`
+              : ""}
+          </div>`;
+      }).join("");
+
+      return `
+        <div class="card">
+          <div class="card-head">
+            <div class="rank-badge ${rankClass}">${rank}</div>
+            <img class="avatar"
+                 src="https://github.com/${esc(eng.author)}.png?size=96"
+                 alt="${esc(eng.author)}"
+                 loading="lazy"
+                 onerror="this.onerror=null;this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 52 52%22%3E%3Crect fill=%22%23e2e8f0%22 width=%2252%22 height=%2252%22/%3E%3C/svg%3E'" />
+            <div class="eng-meta">
+              <div class="eng-name">${esc(eng.author)}</div>
+              ${narrative ? `<p class="narrative">${esc(narrative)}</p>` : ""}
+            </div>
+            <div class="score-block">
+              <div class="score-value">${(eng.final_score||0).toFixed(2)}</div>
+              <div class="score-label">impact score</div>
+            </div>
+          </div>
+
+          <hr class="divider" />
+
+          <div class="charts-row">
+            <div class="chart-block">
+              <div class="chart-label">Impact Tiers</div>
+              <div class="chart-wrap">
+                <canvas id="${tierId}" width="140" height="140"></canvas>
+              </div>
+              <div class="chart-legend">${tierLegend}</div>
+            </div>
+            <div class="chart-block">
+              <div class="chart-label">Work Categories</div>
+              <div class="chart-wrap">
+                <canvas id="${catId}" width="140" height="140"></canvas>
+              </div>
+              <div class="chart-legend">${catLegend}</div>
+            </div>
+          </div>
+
+          <div class="stats-row">${stats}</div>
+          <hr class="divider" />
+
+          <div class="pr-section">
+            <h4>Highlight PRs</h4>
+            ${prs || '<p style="font-size:.8rem;color:var(--muted)">No PRs scored.</p>'}
+          </div>
+        </div>`;
+    }
+
+    function initDoughnut(id, labels, data, colors) {
+      const ctx = document.getElementById(id);
+      if (!ctx) return;
+      new Chart(ctx, {
+        type: "doughnut",
+        data: {
+          labels,
+          datasets: [{
+            data,
+            backgroundColor: colors,
+            borderWidth: 2,
+            borderColor: "#fff",
+            hoverBorderColor: "#fff",
+          }],
+        },
+        options: {
+          responsive: false,
+          cutout: "62%",
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: (ctx) => ` ${ctx.label}: ${ctx.formattedValue}`,
+              },
+            },
+          },
+          animation: { duration: 400 },
+        },
+      });
+    }
+
+    function renderDashboard() {
+      const root = document.getElementById("root");
+      const meta = TOP5.metadata || {};
+      const date = new Date().toLocaleDateString("en-US", { month: "long", year: "numeric" });
+
+      root.innerHTML = `
+        <header class="site-header">
+          <h1>PostHog Engineering Impact &mdash; Top 5 Contributors (90 days)</h1>
+          <p>Evaluated on code influence, collaboration, and reliability &nbsp;&middot;&nbsp; ${date}</p>
+        </header>
+        <div class="cards-grid" id="cards-grid"></div>
+        <section class="methodology">
+          <h3>Methodology</h3>
+          <p><strong>Scoring pipeline:</strong> Each merged PR was assigned
+          structural signals — review depth, file diversity, linked issues, and label
+          weights — producing a combined heuristic score. An LLM then categorised
+          each PR and assigned a <strong>high / medium / low</strong> impact tier.
+          Engineer scores combine tier-weighted PR volume (50 %), collaboration
+          activity (30 %), and structural heuristics (20 %).</p>
+          <p><strong>High impact</strong> means the PR touched critical code paths,
+          attracted substantive reviewer scrutiny, closed tracked issues, or carried
+          a bug-fix, security, or performance label.</p>
+          <p><strong>Data window:</strong> Merged PRs in the last 90 days from the
+          public <a href="https://github.com/PostHog/posthog" target="_blank"
+          rel="noopener">PostHog/posthog</a> repository on GitHub. Dependency bumps,
+          doc-only edits under 20 lines, and bot PRs are excluded before scoring.</p>
+        </section>`;
+
+      const grid    = document.getElementById("cards-grid");
+      const charts  = [];
+
+      (TOP5.top_5 || []).forEach((eng, i) => {
+        const rank = i + 1;
+        grid.insertAdjacentHTML("beforeend", makeCard(eng, rank));
+
+        const tiers = eng.impact_tiers || {};
+        charts.push({
+          tierId:  `tier-${rank}`,
+          catId:   `cat-${rank}`,
+          tierLabels: ["High", "Medium", "Low"],
+          tierData:   [tiers.high||0, tiers.medium||0, tiers.low||0],
+          tierColors: [TIER_COLORS.high, TIER_COLORS.medium, TIER_COLORS.low],
+          catEntries: Object.entries(eng.work_categories || {}).slice(0, 7),
+        });
+      });
+
+      // Initialise charts after all cards are in the DOM
+      charts.forEach(({ tierId, catId, tierLabels, tierData, tierColors, catEntries }) => {
+        initDoughnut(tierId, tierLabels, tierData, tierColors);
+
+        const catLabels = catEntries.map(([k]) => catName(k));
+        const catData   = catEntries.map(([, v]) => Math.round(v * 1000) / 10);
+        const catColors = catEntries.map(([k]) => CAT_COLORS[k] || CAT_COLORS.unknown);
+        initDoughnut(catId, catLabels, catData, catColors);
+      });
+    }
+
+    document.addEventListener("DOMContentLoaded", renderDashboard);
+  </script>
+</body>
+</html>
